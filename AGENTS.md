@@ -1,9 +1,21 @@
-<!-- BEGIN:nextjs-agent-rules -->
+# Agent Instructions: API Pulse Check Application
 
-# This is NOT the Next.js you know
+## Tech Stack & Architecture
+- **Frontend:** Next.js (App Router, TypeScript, Tailwind CSS).
+- **Backend/API:** Node.js (Express or Next.js Route Handlers).
+- **Domain:** HTTP Client & Monitoring Tool (Postman alternative). Handles sending HTTP requests (GET, POST, PUT, DELETE), displaying responses, status codes, timing metrics, and headers.
 
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+## Development Standards
+- **Component Design:** Keep UI components modular. Separate request building UI, response viewer, and history sidebar into distinct components.
+- **Type Safety:** Maintain strict TypeScript interfaces for API Requests, Responses, and Environment variables.
+- **Error Handling:** Gracefully catch network errors, timeouts, and CORS issues when sending API calls.
 
-This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+## Key Terminal Commands
+- **Install Dependencies:** `npm install`
+- **Run Dev Server:** `npm run dev`
+- **Build & Lint:** `npm run build && npm run lint`
 
-<!-- END:nextjs-agent-rules -->
+## Agent Guidelines
+- Before making multi-file edits, outline a 2-step execution plan.
+- Always run `npm run lint` or check TypeScript diagnostics after modifying API routes.
+- Do not store API keys or secrets directly in code; use `.env.local`.
