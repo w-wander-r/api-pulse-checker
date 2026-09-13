@@ -1,36 +1,37 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# API Pulse Check
 
-## Getting Started
+API Pulse Check is an HTTP client application that allows users to build and send HTTP requests, inspect responses, and track request history. It provides a clean, browser-based interface for testing and debugging APIs.
 
-First, run the development server:
+## Overview
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- **Purpose**: API Pulse Check simplifies API testing by providing an intuitive interface for constructing HTTP requests and analyzing responses — including status codes, response time, headers, and body content.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+- **Web-Based**: As a web application, API Pulse Check runs entirely in the browser, requiring no installation or configuration. Simply open it in your browser and start testing.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- **Open Source**: The source code is available on GitHub, encouraging collaboration and contributions from developers around the world.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- **Client-Side**: All requests are made directly from the browser using the native Fetch API, making it lightweight and fast.
 
-## Learn More
+## Features
 
-To learn more about Next.js, take a look at the following resources:
+- **Request Builder**: Select HTTP method (GET, POST, PUT, DELETE, PATCH), enter URL, add custom headers, and include request body.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- **Response Viewer**: View status codes (color-coded by category), response time, response size, and formatted response body.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- **Request History**: Automatically logs all sent requests with method, URL, timestamp, and status for easy reference.
 
-## Deploy on Vercel
+- **Error Handling**: Gracefully handles network errors, CORS issues, and timeouts with descriptive messages.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- **JSON Formatting**: Automatically pretty-prints JSON responses for readability.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Technologies Used
+
+- **Next.js**: React framework with App Router for file-based routing and build optimization.
+
+- **React**: UI library for building component-based interactive interfaces.
+
+- **TypeScript**: Static type safety for requests, responses, and application state.
+
+- **Tailwind CSS**: Utility-first CSS framework for responsive, dark-mode-first styling.
+
+- **Node.js**: Runtime for development server and build tooling.
