@@ -14,6 +14,9 @@
 import { useState } from "react";
 import type { HttpMethod, Header } from "../lib/types";
 
+// Define the available request tabs
+type RequestTab = "headers" | "body" | "params";
+
 interface RequestBuilderProps {
   onSendRequest: (data: {
     method: HttpMethod;
@@ -30,6 +33,9 @@ export default function RequestBuilder({ onSendRequest }: RequestBuilderProps) {
     { id: "1", key: "Content-Type", value: "application/json", enabled: true },
   ]);
   const [body, setBody] = useState("");
+
+  // Track which tab is active in the request section
+  const [activeTab, setActiveTab] = useState<RequestTab>("headers");
 
   const methods: HttpMethod[] = ["GET", "POST", "PUT", "DELETE", "PATCH"];
 
@@ -101,71 +107,119 @@ export default function RequestBuilder({ onSendRequest }: RequestBuilderProps) {
       </div>
 
       {/* Tabs */}
-      {/* TODO: fix tabs */}
-      <div className="flex gap-4">
-        <h3 className="text-slate-300 font-medium pb-1 border-b-2 border-blue-500">
-          Headers
-        </h3>
-        <h3 className="text-slate-300 font-medium pb-1 border-b-2 border-transparent hover:text-white cursor-pointer">
-          Body
-        </h3>
-      </div>
-
-      {/* Headers */}
-      <div className="flex flex-col gap-2">
-        {headers.map((header) => (
-          <div key={header.id} className="flex gap-2 items-center">
-            <input
-              type="checkbox"
-              checked={header.enabled}
-              onChange={(e) => updateHeader(header.id, "enabled", e.target.checked)}
-              className="w-4 h-4 accent-blue-500"
-            />
-            <input
-              type="text"
-              value={header.key}
-              onChange={(e) => updateHeader(header.id, "key", e.target.value)}
-              placeholder="Header name"
-              className="flex-1 px-3 py-1.5 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:border-blue-500"
-            />
-            <input
-              type="text"
-              value={header.value}
-              onChange={(e) => updateHeader(header.id, "value", e.target.value)}
-              placeholder="Header value"
-              className="flex-1 px-3 py-1.5 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:border-blue-500"
-            />
-            <button
-              type="button"
-              onClick={() => removeHeader(header.id)}
-              className="text-red-400 hover:text-red-300 px-2"
-            >
-              x
-            </button>
-          </div>
-        ))}
+      <div className="flex gap-4 border-b border-slate-700">
+        {/* Headers Tab */}
         <button
           type="button"
-          onClick={addHeader}
-          className="text-blue-400 hover:text-blue-300 text-sm text-left"
+          onClick={() => setActiveTab("headers")}
+          className={`pb-2 px-1 font-medium transition-colors ${
+            activeTab === "headers"
+              ? "text-blue-400 border-b-2 border-blue-400"
+              : "text-slate-400 hover:text-slate-200 border-b-2 border-transparent"
+          }`}
         >
-          + Add Header
+          Headers
+        </button>
+
+        {/* Body Tab */}
+        <button
+          type="button"
+          onClick={() => setActiveTab("body")}
+          className={`pb-2 px-1 font-medium transition-colors ${
+            activeTab === "body"
+              ? "text-blue-400 border-b-2 border-blue-400"
+              : "text-slate-400 hover:text-slate-200 border-b-2 border-transparent"
+          }`}
+        >
+          Body
+        </button>
+
+        {/* Params Tab (for future use) */}
+        <button
+          type="button"
+          onClick={() => setActiveTab("params")}
+          className={`pb-2 px-1 font-medium transition-colors ${
+            activeTab === "params"
+              ? "text-blue-400 border-b-2 border-blue-400"
+              : "text-slate-400 hover:text-slate-200 border-b-2 border-transparent"
+          }`}
+        >
+          Params
         </button>
       </div>
 
-      {/* Body */}
-      {(method !== "GET" && method !== "DELETE") && (
-        <div className="flex flex-col gap-2">
-          <label className="text-slate-400 text-sm">Request Body (JSON)</label>
-          <textarea
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            placeholder='{"key": "value"}'
-            rows={6}
-            className="px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white font-mono text-sm placeholder-slate-500 focus:outline-none focus:border-blue-500 resize-y"
-          />
-        </div>
-      )}
+      {/* Tab Content - Only shows the active tab's content */}
+      <div className="min-h-[120px]">
+        {/* Headers Content */}
+        {activeTab === "headers" && (
+          <div className="flex flex-col gap-2">
+            {headers.map((header) => (
+              <div key={header.id} className="flex gap-2 items-center">
+                <input
+                  type="checkbox"
+                  checked={header.enabled}
+                  onChange={(e) => updateHeader(header.id, "enabled", e.target.checked)}
+                  className="w-4 h-4 accent-blue-500"
+                />
+                <input
+                  type="text"
+                  value={header.key}
+                  onChange={(e) => updateHeader(header.id, "key", e.target.value)}
+                  placeholder="Header name"
+                  className="flex-1 px-3 py-1.5 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:border-blue-500"
+                />
+                <input
+                  type="text"
+                  value={header.value}
+                  onChange={(e) => updateHeader(header.id, "value", e.target.value)}
+                  placeholder="Header value"
+                  className="flex-1 px-3 py-1.5 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:border-blue-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeHeader(header.id)}
+                  className="text-red-400 hover:text-red-300 px-2"
+                >
+                  x
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={addHeader}
+              className="text-blue-400 hover:text-blue-300 text-sm text-left"
+            >
+              + Add Header
+            </button>
+          </div>
+        )}
+
+        {/* Body Content */}
+        {(method !== "GET" && method !== "DELETE") && activeTab === "body" && (
+          <div className="flex flex-col gap-2">
+            <label className="text-slate-400 text-sm">Request Body (JSON)</label>
+            <textarea
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              placeholder='{"key": "value"}'
+              rows={6}
+              className="px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white font-mono text-sm placeholder-slate-500 focus:outline-none focus:border-blue-500 resize-y"
+            />
+          </div>
+        )}
+
+        {/* Params Content (placeholder for future) */}
+        {activeTab === "params" && (
+          <div className="flex flex-col gap-2">
+            <p className="text-slate-500 text-sm">
+              URL query parameters will appear here
+            </p>
+            <p className="text-slate-600 text-xs">
+              Coming soon - add key-value pairs to append to your URL
+            </p>
+          </div>
+        )}
+      </div>
     </form>
   );
 }

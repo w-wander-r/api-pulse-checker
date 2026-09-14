@@ -10,7 +10,11 @@
 
 "use client";
 
+import { useState } from "react";
 import type { ApiResponse } from "../lib/types";
+
+// Define the available response tabs
+type ResponseTab = "body" | "headers" | "cookies";
 
 interface ResponseViewerProps {
   response: ApiResponse | null;       // The response data (null if no request sent yet)
@@ -18,6 +22,9 @@ interface ResponseViewerProps {
 }
 
 export default function ResponseViewer({ response, isLoading }: ResponseViewerProps) {
+  // Track which response tab is active
+  const [activeTab, setActiveTab] = useState<ResponseTab>("body");
+
   // ---- COLOR CODING FOR STATUS CODES ----
   const getStatusColor = (status: number): string => {
     if (status >= 200 && status < 300) return "text-green-400";
@@ -75,22 +82,98 @@ export default function ResponseViewer({ response, isLoading }: ResponseViewerPr
       </div>
 
       {/* Response Tabs */}
-      {/* TODO: fix tabs */}
-      <div className="flex gap-4">
-        <h4 className="text-slate-300 text-sm font-medium pb-1 border-b-2 border-blue-500">
+      <div className="flex gap-4 border-b border-slate-700">
+        {/* Body Tab */}
+        <button
+          type="button"
+          onClick={() => setActiveTab("body")}
+          className={`pb-2 px-1 text-sm font-medium transition-colors ${
+            activeTab === "body"
+              ? "text-blue-400 border-b-2 border-blue-400"
+              : "text-slate-400 hover:text-slate-200 border-b-2 border-transparent"
+          }`}
+        >
           Body
-        </h4>
-        <h4 className="text-slate-400 text-sm pb-1 border-b-2 border-transparent hover:text-white cursor-pointer">
+        </button>
+
+        {/* Headers Tab */}
+        <button
+          type="button"
+          onClick={() => setActiveTab("headers")}
+          className={`pb-2 px-1 text-sm font-medium transition-colors ${
+            activeTab === "headers"
+              ? "text-blue-400 border-b-2 border-blue-400"
+              : "text-slate-400 hover:text-slate-200 border-b-2 border-transparent"
+          }`}
+        >
           Headers
-        </h4>
+        </button>
+
+        {/* Cookies Tab (for future use) */}
+        <button
+          type="button"
+          onClick={() => setActiveTab("cookies")}
+          className={`pb-2 px-1 text-sm font-medium transition-colors ${
+            activeTab === "cookies"
+              ? "text-blue-400 border-b-2 border-blue-400"
+              : "text-slate-400 hover:text-slate-200 border-b-2 border-transparent"
+          }`}
+        >
+          Cookies
+        </button>
       </div>
 
-      {/* Response Body */}
-      <pre className="bg-slate-900 p-4 rounded-lg overflow-auto max-h-96 text-sm">
-        <code className="text-slate-200">
-          {formatBody(response.body)}
-        </code>
-      </pre>
+      {/* Tab Content - Only shows the active tab's content */}
+      <div className="min-h-[200px]">
+        {/* Body Content */}
+        {activeTab === "body" && (
+          <pre className="bg-slate-900 p-4 rounded-lg overflow-auto max-h-96 text-sm">
+            <code className="text-slate-200">
+              {formatBody(response.body)}
+            </code>
+          </pre>
+        )}
+
+        {/* Headers Content */}
+        {activeTab === "headers" && (
+          <div className="bg-slate-900 p-4 rounded-lg overflow-auto max-h-96">
+            {Object.entries(response.headers).length > 0 ? (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-slate-400 border-b border-slate-700">
+                    <th className="text-left py-2 pr-4">Header</th>
+                    <th className="text-left py-2">Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(response.headers).map(([key, value]) => (
+                    <tr key={key} className="border-b border-slate-800">
+                      <td className="py-2 pr-4 text-slate-300 font-mono">{key}</td>
+                      <td className="py-2 text-slate-400 font-mono break-all">{value}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <p className="text-slate-500 text-sm">
+                No response headers available
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Cookies Content (placeholder) */}
+        {activeTab === "cookies" && (
+          <div className="bg-slate-900 p-4 rounded-lg">
+            <p className="text-slate-500 text-sm">
+              Cookie information will appear here
+            </p>
+            <p className="text-slate-600 text-xs mt-1">
+              Coming soon - view cookies returned by the server
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
