@@ -11,7 +11,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import type { HttpMethod, Header } from "../lib/types";
 
 // Define the available request tabs
@@ -36,6 +36,23 @@ export default function RequestBuilder({ onSendRequest }: RequestBuilderProps) {
 
   // Track which tab is active in the request section
   const [activeTab, setActiveTab] = useState<RequestTab>("headers");
+
+  // Ref for auto-resizing textarea
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-resize textarea as content changes
+  const autoResizeTextarea = useCallback(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = "auto";
+      textarea.style.height = `${Math.min(textarea.scrollHeight, 400)}px`;
+    }
+  }, []);
+
+  // Run auto-resize when body content changes
+  useEffect(() => {
+    autoResizeTextarea();
+  }, [body, autoResizeTextarea]);
 
   const methods: HttpMethod[] = ["GET", "POST", "PUT", "DELETE", "PATCH"];
 
@@ -195,15 +212,16 @@ export default function RequestBuilder({ onSendRequest }: RequestBuilderProps) {
         )}
 
         {/* Body Content */}
-        {(method !== "GET" && method !== "DELETE") && activeTab === "body" && (
+        {activeTab === "body" && (
           <div className="flex flex-col gap-2">
             <label className="text-slate-400 text-sm">Request Body (JSON)</label>
             <textarea
+              ref={textareaRef}
               value={body}
               onChange={(e) => setBody(e.target.value)}
               placeholder='{"key": "value"}'
-              rows={6}
-              className="px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white font-mono text-sm placeholder-slate-500 focus:outline-none focus:border-blue-500 resize-y"
+              rows={4}
+              className="px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white font-mono text-sm placeholder-slate-500 focus:outline-none focus:border-blue-500 resize-none"
             />
           </div>
         )}

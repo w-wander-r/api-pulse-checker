@@ -10,7 +10,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import type { ApiResponse } from "../lib/types";
 
 // Define the available response tabs
@@ -24,6 +24,22 @@ interface ResponseViewerProps {
 export default function ResponseViewer({ response, isLoading }: ResponseViewerProps) {
   // Track which response tab is active
   const [activeTab, setActiveTab] = useState<ResponseTab>("body");
+  // Track copy button state for feedback
+  const [copied, setCopied] = useState(false);
+
+  // ---- COPY TO CLIPBOARD ----
+  const handleCopyResponse = async () => {
+    if (!response?.body) return;
+
+    try {
+      await navigator.clipboard.writeText(response.body);
+      setCopied(true);
+      // Reset after 2 seconds
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy:", err);
+    }
+  };
 
   // ---- COLOR CODING FOR STATUS CODES ----
   const getStatusColor = (status: number): string => {
@@ -48,9 +64,34 @@ export default function ResponseViewer({ response, isLoading }: ResponseViewerPr
   // Loading state - waiting for response
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-slate-400">
-        <div className="animate-spin text-3xl mb-4">{">"}</div>
-        <p>Sending request...</p>
+      <div className="flex flex-col gap-4">
+        {/* Skeleton status bar */}
+        <div className="flex items-center gap-4 pb-3 border-b border-slate-700">
+          <div className="h-6 w-32 bg-slate-700 rounded animate-pulse" />
+          <div className="h-4 w-20 bg-slate-700 rounded animate-pulse" />
+          <div className="h-4 w-24 bg-slate-700 rounded animate-pulse" />
+        </div>
+
+        {/* Skeleton tabs */}
+        <div className="flex gap-4 border-b border-slate-700">
+          <div className="h-6 w-12 bg-slate-700 rounded animate-pulse" />
+          <div className="h-6 w-14 bg-slate-700 rounded animate-pulse" />
+          <div className="h-6 w-14 bg-slate-700 rounded animate-pulse" />
+        </div>
+
+        {/* Skeleton content lines */}
+        <div className="bg-slate-900 p-4 rounded-lg space-y-3">
+          <div className="h-4 w-full bg-slate-700 rounded animate-pulse" />
+          <div className="h-4 w-5/6 bg-slate-700 rounded animate-pulse" />
+          <div className="h-4 w-4/6 bg-slate-700 rounded animate-pulse" />
+          <div className="h-4 w-full bg-slate-700 rounded animate-pulse" />
+          <div className="h-4 w-3/4 bg-slate-700 rounded animate-pulse" />
+        </div>
+
+        {/* Loading text */}
+        <p className="text-center text-slate-500 text-sm animate-pulse">
+          Sending request...
+        </p>
       </div>
     );
   }
@@ -59,6 +100,7 @@ export default function ResponseViewer({ response, isLoading }: ResponseViewerPr
   if (!response) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-slate-500">
+        <div className="text-5xl mb-4">{"<>"}</div>
         <p className="text-lg">Enter a URL and click Send</p>
         <p className="text-sm mt-2">The response will appear here</p>
       </div>
@@ -127,11 +169,26 @@ export default function ResponseViewer({ response, isLoading }: ResponseViewerPr
       <div className="min-h-[200px]">
         {/* Body Content */}
         {activeTab === "body" && (
-          <pre className="bg-slate-900 p-4 rounded-lg overflow-auto max-h-96 text-sm">
-            <code className="text-slate-200">
-              {formatBody(response.body)}
-            </code>
-          </pre>
+          <div className="relative group">
+            {/* Copy Button */}
+            <button
+              onClick={handleCopyResponse}
+              className={`absolute top-2 right-2 px-3 py-1.5 rounded text-xs font-medium transition-all ${
+                copied
+                  ? "bg-green-600 text-white"
+                  : "bg-slate-700 text-slate-300 hover:bg-slate-600 hover:text-white opacity-0 group-hover:opacity-100"
+              }`}
+              title="Copy response to clipboard"
+            >
+              {copied ? "Copied!" : "Copy"}
+            </button>
+
+            <pre className="bg-slate-900 p-4 rounded-lg overflow-auto max-h-96 text-sm pr-20">
+              <code className="text-slate-200">
+                {formatBody(response.body)}
+              </code>
+            </pre>
+          </div>
         )}
 
         {/* Headers Content */}
