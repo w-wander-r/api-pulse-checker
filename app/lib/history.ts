@@ -26,6 +26,9 @@ export function rowToHistoryItem(row: RequestHistoryRow): HistoryItem {
     url: row.url,
     timestamp: new Date(row.created_at),
     status: row.status ?? undefined,
+    // Needed so a history entry can be reloaded into the request builder.
+    headers: row.headers ?? undefined,
+    body: row.body ?? undefined,
   };
 }
 

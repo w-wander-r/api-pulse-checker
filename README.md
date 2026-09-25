@@ -49,8 +49,6 @@ Runinng `npm run dev` starting postgress container. See `dev.mjs`
 cp .env.example .env.local
 ```
 
-`.env.local` is git-ignored; never commit real credentials.
-
 ```bash
 DATABASE_URL=postgresql://wander:wander@localhost:5432/wander
 ```

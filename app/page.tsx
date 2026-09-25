@@ -29,14 +29,10 @@ export default function Home() {
   const [response, setResponse] = useState<ApiResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>([]);
-
-  // Database connectivity, shown in the sidebar footer.
-  // null = still checking, otherwise the last probe result.
+  const [requestToLoad, setRequestToLoad] = useState<ApiRequest | null>(null);
   const [dbStatus, setDbStatus] = useState<DbHealthResponse | null>(null);
 
   // ---- LOAD PERSISTED HISTORY ON MOUNT ----
-  // History lives in PostgreSQL (table: request_history). If the database is
-  // unavailable the app keeps working with in-memory history only.
   useEffect(() => {
     let cancelled = false;
 
@@ -102,6 +98,8 @@ export default function Home() {
       setResponse(apiResponse);
 
       // Show the entry in the sidebar right away...
+      // (headers/body included so it can be reloaded even before the
+      //  database confirms the save)
       setHistory((prev) => [
         {
           id: localId,
@@ -109,6 +107,8 @@ export default function Home() {
           url: data.url,
           timestamp: new Date(),
           status: res.status,
+          headers: data.headers.map(({ key, value }) => ({ key, value })),
+          body: data.method !== "GET" ? data.body : undefined,
         },
         ...prev,
       ]);
@@ -157,6 +157,8 @@ export default function Home() {
           url: data.url,
           timestamp: new Date(),
           status: undefined,
+          headers: data.headers.map(({ key, value }) => ({ key, value })),
+          body: data.method !== "GET" ? data.body : undefined,
         },
         ...prev,
       ]);
@@ -174,9 +176,22 @@ export default function Home() {
   };
 
   // ---- HANDLE SELECTING FROM HISTORY ----
+  // Convert the history entry back into an ApiRequest so the builder can
+  // repopulate its method, URL, headers, and body.
   const handleSelectHistory = (item: HistoryItem) => {
-    console.log("Selected from history:", item);
-    // TODO: populate the request builder with this data
+    const headers: Header[] = (item.headers ?? []).map((header, index) => ({
+      id: `${item.id}-header-${index}`,
+      key: header.key,
+      value: header.value,
+      enabled: true,
+    }));
+
+    setRequestToLoad({
+      method: item.method,
+      url: item.url,
+      headers,
+      body: item.body ?? "",
+    });
   };
 
   // ---- HANDLE REMOVING ONE HISTORY ENTRY ----
@@ -214,7 +229,10 @@ export default function Home() {
         <main className="flex-1 flex flex-col p-6 overflow-y-auto">
           {/* Request Builder - takes about 1/3 of space */}
           <div className="mb-6">
-            <RequestBuilder onSendRequest={handleSendRequest} />
+            <RequestBuilder
+              onSendRequest={handleSendRequest}
+              requestToLoad={requestToLoad}
+            />
           </div>
 
           {/* Divider */}

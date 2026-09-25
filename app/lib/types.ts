@@ -81,4 +81,8 @@ export interface HistoryItem {
   url: string;
   timestamp: Date;
   status?: number;       // Status code from the response (if sent)
+  /** Headers that were actually sent (from the DB JSONB column). */
+  headers?: StoredHeader[];
+  /** Raw request body that was sent (undefined for GET / empty bodies). */
+  body?: string;
 }

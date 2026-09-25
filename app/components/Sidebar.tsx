@@ -76,8 +76,18 @@ export default function Sidebar({
             {history.map((item) => (
               <li
                 key={item.id}
+                role="button"
+                tabIndex={0}
+                title="Click to load this request into the builder"
                 onClick={() => onSelectRequest(item)}
-                className="group relative px-4 py-3 border-b border-slate-800 hover:bg-slate-800 cursor-pointer transition-colors"
+                onKeyDown={(e) => {
+                  // Make history items reachable without a mouse.
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onSelectRequest(item);
+                  }
+                }}
+                className="group relative px-4 py-3 border-b border-slate-800 hover:bg-slate-800 focus:bg-slate-800 focus:outline-none focus-visible:ring-1 focus-visible:ring-blue-500 cursor-pointer transition-colors"
               >
                 {/* Delete this entry (also removes it from the database) */}
                 {onDeleteRequest && (

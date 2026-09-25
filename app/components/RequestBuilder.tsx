@@ -12,7 +12,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import type { HttpMethod, Header } from "../lib/types";
+import type { ApiRequest, HttpMethod, Header } from "../lib/types";
 
 // Define the available request tabs
 type RequestTab = "headers" | "body" | "params";
@@ -24,9 +24,19 @@ interface RequestBuilderProps {
     headers: Header[];
     body: string;
   }) => void;
+  /**
+   * Request selected from the sidebar history. Every time a new value is
+   * passed here the builder repopulates its method, URL, headers, and body.
+   * Named `requestToLoad` rather than `onLoadRequest` because it carries
+   * data into the component instead of being an event callback.
+   */
+  requestToLoad?: ApiRequest | null;
 }
 
-export default function RequestBuilder({ onSendRequest }: RequestBuilderProps) {
+export default function RequestBuilder({
+  onSendRequest,
+  requestToLoad,
+}: RequestBuilderProps) {
   const [method, setMethod] = useState<HttpMethod>("GET");
   const [url, setUrl] = useState("");
   const [headers, setHeaders] = useState<Header[]>([
@@ -53,6 +63,21 @@ export default function RequestBuilder({ onSendRequest }: RequestBuilderProps) {
   useEffect(() => {
     autoResizeTextarea();
   }, [body, autoResizeTextarea]);
+
+  // ---- LOAD A REQUEST FROM HISTORY ----
+  const [previousRequest, setPreviousRequest] = useState<ApiRequest | null>(
+    null
+  );
+
+  if (requestToLoad && requestToLoad !== previousRequest) {
+    setPreviousRequest(requestToLoad);
+    setMethod(requestToLoad.method);
+    setUrl(requestToLoad.url);
+    setHeaders(requestToLoad.headers);
+    setBody(requestToLoad.body);
+    // Jump back to Headers so the user sees what was reloaded.
+    setActiveTab("headers");
+  }
 
   const methods: HttpMethod[] = ["GET", "POST", "PUT", "DELETE", "PATCH"];
 
