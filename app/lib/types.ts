@@ -27,6 +27,53 @@ export interface ApiResponse {
   size: number;          // Response size in bytes
 }
 
+/** A single header key-value pair as persisted in the database (JSONB) */
+export interface StoredHeader {
+  key: string;
+  value: string;
+}
+
+/**
+ * Row shape of the `request_history` table.
+ * Note: PostgreSQL returns BIGSERIAL ids and TIMESTAMPTZ as strings.
+ */
+export interface RequestHistoryRow {
+  id: string;                       // BIGSERIAL (returned as a string by pg)
+  method: HttpMethod;
+  url: string;
+  headers: StoredHeader[] | null;   // Headers that were sent
+  body: string | null;              // Raw request body (null for GET, etc.)
+  status: number | null;            // Response status code (null if network error)
+  duration_ms: number | null;       // How long the request took
+  response_size: number | null;     // Response size in bytes
+  created_at: string;               // ISO timestamp
+}
+
+/** Payload accepted by `POST /api/history` */
+export interface CreateHistoryInput {
+  method: HttpMethod;
+  url: string;
+  headers?: Header[];
+  body?: string;
+  status?: number | null;
+  durationMs?: number | null;
+  responseSize?: number | null;
+}
+
+/** Response body of `GET /api/history` */
+export interface HistoryListResponse {
+  items: RequestHistoryRow[];
+}
+
+/** Response body of `GET /api/db/health` */
+export interface DbHealthResponse {
+  connected: boolean;
+  message: string;
+  version?: string;
+  database?: string;
+  latencyMs?: number;
+}
+
 /** A saved request in history */
 export interface HistoryItem {
   id: string;

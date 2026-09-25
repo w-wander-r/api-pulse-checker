@@ -1,0 +1,23 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: api-check
+    restart: always
+    environment:
+      POSTGRES_USER: wander
+      POSTGRES_PASSWORD: wander
+      POSTGRES_DB: wander
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # pg_isready exits 0 once PostgreSQL accepts connections - `up -d --wait`
+      # and `npm run dev` rely on this to know when the DB is usable.
+      test: ["CMD-SHELL", "pg_isready -U wander -d wander"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+volumes:
+  pgdata:
