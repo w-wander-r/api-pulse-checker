@@ -60,6 +60,31 @@ npm run db:migrate   # applies db/schema.sql (idempotent)
 npm run db:check     # prints server version + tables
 ```
 
+### 4. Production database (Neon) - separate from dev
+
+Development keeps using the Docker container above; production uses a managed
+**Neon** Postgres on the free tier. The two databases are completely independent -
+the app always talks to whichever `DATABASE_URL` it is given, so there is no
+conflict between them.
+
+1. Create a free Neon project and copy the **pooled** connection string
+   (Neon console -> your project -> Connect). Keep `sslmode=require`.
+2. Create the schema on Neon once (idempotent, safe to re-run):
+
+   ```bash
+   DATABASE_URL="<neon pooled url>" npm run db:migrate:prod
+   ```
+
+   The command prints the connected database name - expect `neondb`, not `wander`.
+3. Deploy: import the GitHub repo on your hosting platform (e.g. Vercel) and set
+   `DATABASE_URL` to the same Neon URL in the platform's environment variables.
+   Every push to the branch redeploys automatically.
+
+Local `.env.local` is git-ignored and only read by local dev, so the Neon
+credentials live solely in the hosting platform's environment settings.
+Troubleshooting: if the connection fails during the TLS handshake, change
+`sslmode=require` to `sslmode=no-verify` in the Neon URL.
+
 ### API endpoints
 
 | Method | Route | Purpose |
@@ -83,6 +108,6 @@ app/api/history/         # history collection + single-entry endpoints
 db/schema.sql            # database schema
 docker-compose.yml       # PostgreSQL service (used by npm run dev)
 scripts/dev.mjs          # npm run dev - DB lifecycle + Next.js dev server
-scripts/db-migrate.mjs   # npm run db:migrate
+scripts/db-migrate.mjs   # npm run db:migrate / db:migrate:prod
 scripts/db-check.mjs     # npm run db:check
 ```

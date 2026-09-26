@@ -12,7 +12,8 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import type { ApiRequest, HttpMethod, Header } from "../lib/types";
+import type { ApiRequest, HttpMethod, Header, QueryParam } from "../lib/types";
+import { buildUrlWithParams, parseQueryParams } from "../lib/utils";
 
 // Define the available request tabs
 type RequestTab = "headers" | "body" | "params";
@@ -43,6 +44,7 @@ export default function RequestBuilder({
     { id: "1", key: "Content-Type", value: "application/json", enabled: true },
   ]);
   const [body, setBody] = useState("");
+  const [params, setParams] = useState<QueryParam[]>([]);
 
   // Track which tab is active in the request section
   const [activeTab, setActiveTab] = useState<RequestTab>("headers");
@@ -73,6 +75,7 @@ export default function RequestBuilder({
     setPreviousRequest(requestToLoad);
     setMethod(requestToLoad.method);
     setUrl(requestToLoad.url);
+    setParams(parseQueryParams(requestToLoad.url));
     setHeaders(requestToLoad.headers);
     setBody(requestToLoad.body);
     // Jump back to Headers so the user sees what was reloaded.
@@ -110,12 +113,51 @@ export default function RequestBuilder({
     setHeaders(headers.filter((h) => h.id !== id));
   };
 
+  // ---- PARAMS (URL QUERY STRING) ----
+  // The Params tab and the URL bar are two views of the same data: every
+  // edit on one side is written back to the other so they can't drift.
+  const applyParams = (next: QueryParam[]) => {
+    setParams(next);
+    setUrl(buildUrlWithParams(url, next));
+  };
+
+  const addParam = () => {
+    applyParams([
+      ...params,
+      { id: "new-" + Date.now(), key: "", value: "", enabled: true },
+    ]);
+  };
+
+  const updateParam = (
+    id: string,
+    field: "key" | "value" | "enabled",
+    newValue: string | boolean
+  ) => {
+    applyParams(
+      params.map((p) => (p.id === id ? { ...p, [field]: newValue } : p))
+    );
+  };
+
+  const removeParam = (id: string) => {
+    applyParams(params.filter((p) => p.id !== id));
+  };
+
+  // Typing/pasting a query string into the URL bar fills the Params tab live.
+  const handleUrlChange = (value: string) => {
+    setUrl(value);
+    setParams(parseQueryParams(value));
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const activeHeaders = headers.filter(
       (h) => h.enabled && h.key.trim() !== ""
     );
-    onSendRequest({ method, url, headers: activeHeaders, body });
+    // Compose the final URL: base + enabled params (?key=value&key2=value2)
+    const finalUrl = buildUrlWithParams(url, params);
+    // Keep the URL bar showing exactly what is being sent.
+    setUrl(finalUrl);
+    onSendRequest({ method, url: finalUrl, headers: activeHeaders, body });
   };
 
   return (
@@ -136,8 +178,8 @@ export default function RequestBuilder({
         <input
           type="text"
           value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          placeholder="https://api.example.com/users"
+          onChange={(e) => handleUrlChange(e.target.value)}
+          placeholder="https://api.example.com/users?page=1"
           className="flex-1 px-4 py-2 bg-slate-800 border border-slate-600 rounded-r-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
         />
         <button
@@ -176,7 +218,7 @@ export default function RequestBuilder({
           Body
         </button>
 
-        {/* Params Tab (for future use) */}
+        {/* Params Tab */}
         <button
           type="button"
           onClick={() => setActiveTab("params")}
@@ -251,14 +293,61 @@ export default function RequestBuilder({
           </div>
         )}
 
-        {/* Params Content (placeholder for future) */}
+        {/* Params Content - query string editor, mirrors the URL bar */}
         {activeTab === "params" && (
           <div className="flex flex-col gap-2">
-            <p className="text-slate-500 text-sm">
-              URL query parameters will appear here
-            </p>
+            {params.length === 0 && (
+              <p className="text-slate-500 text-sm">
+                No query parameters yet - add pairs below, or type a{" "}
+                <code className="text-slate-400">?key=value</code> query
+                directly into the URL.
+              </p>
+            )}
+            {params.map((param) => (
+              <div key={param.id} className="flex gap-2 items-center">
+                <input
+                  type="checkbox"
+                  checked={param.enabled}
+                  onChange={(e) =>
+                    updateParam(param.id, "enabled", e.target.checked)
+                  }
+                  className="w-4 h-4 accent-blue-500"
+                />
+                <input
+                  type="text"
+                  value={param.key}
+                  onChange={(e) => updateParam(param.id, "key", e.target.value)}
+                  placeholder="Parameter name"
+                  className="flex-1 px-3 py-1.5 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:border-blue-500"
+                />
+                <input
+                  type="text"
+                  value={param.value}
+                  onChange={(e) =>
+                    updateParam(param.id, "value", e.target.value)
+                  }
+                  placeholder="Value"
+                  className="flex-1 px-3 py-1.5 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:border-blue-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeParam(param.id)}
+                  className="text-red-400 hover:text-red-300 px-2"
+                >
+                  x
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={addParam}
+              className="text-blue-400 hover:text-blue-300 text-sm text-left"
+            >
+              + Add Param
+            </button>
             <p className="text-slate-600 text-xs">
-              Coming soon - add key-value pairs to append to your URL
+              Enabled parameters are appended to the URL when the request is
+              sent.
             </p>
           </div>
         )}

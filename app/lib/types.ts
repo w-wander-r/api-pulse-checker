@@ -9,6 +9,14 @@ export interface Header {
   enabled: boolean;  // Toggle to include/exclude this header
 }
 
+/** A single URL query parameter edited in the Params tab */
+export interface QueryParam {
+  id: string;        // Unique ID for React list rendering
+  key: string;       // Parameter name (e.g., "page")
+  value: string;     // Parameter value (e.g., "2")
+  enabled: boolean;  // Toggle to include/exclude this parameter
+}
+
 /** Represents an API request that the user is building */
 export interface ApiRequest {
   method: HttpMethod;

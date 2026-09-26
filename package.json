@@ -11,6 +11,7 @@
     "db:up": "docker compose up -d --wait",
     "db:down": "docker compose down",
     "db:migrate": "node --env-file-if-exists=.env.local scripts/db-migrate.mjs",
+    "db:migrate:prod": "node scripts/db-migrate.mjs",
     "db:check": "node --env-file-if-exists=.env.local scripts/db-check.mjs"
   },
   "dependencies": {

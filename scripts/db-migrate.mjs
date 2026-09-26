@@ -4,7 +4,8 @@
 // Applies db/schema.sql to the database pointed at by DATABASE_URL.
 //
 // Usage:
-//   npm run db:migrate
+//   npm run db:migrate                    # local dev (.env.local is read)
+//   DATABASE_URL="<neon url>" npm run db:migrate:prod   # production (no env file)
 // ============================================================
 
 import { readFileSync } from "node:fs";
@@ -22,9 +23,10 @@ const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
   console.error(
     "[db:migrate] DATABASE_URL is not set.\n" +
-      "             Copy .env.example to .env.local (it defaults to the local Docker\n" +
-      "             container: postgresql://wander:wander@localhost:5432/wander)\n" +
-      "             and run: npm run db:migrate"
+      "             Local dev (Docker container):\n" +
+      "               cp .env.example .env.local   # then: npm run db:migrate\n" +
+      "             Production (Neon) - pass the URL explicitly, no env file is read:\n" +
+      "               DATABASE_URL=\"<neon pooled url>\" npm run db:migrate:prod"
   );
   process.exit(1);
 }
