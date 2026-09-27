@@ -85,11 +85,21 @@ export default function Home() {
       const responseBody = await res.text();
       const endTime = Date.now();
 
+      // Convert the fetch Headers object to a plain object (plan 1.3) so
+      // the ResponseViewer Headers tab can render it. `Headers` is iterable
+      // of [key, value] pairs; the browser lowercases keys and combines
+      // duplicates, and hides Set-Cookie (forbidden response header).
+      // Note: no conversion needed on the error path below - a network
+      // failure has no response headers at all.
+      const responseHeaders: Record<string, string> = Object.fromEntries(
+        res.headers
+      );
+
       // Build ApiResponse object
       const apiResponse: ApiResponse = {
         status: res.status,
         statusText: res.statusText,
-        headers: {}, // TODO
+        headers: responseHeaders,
         body: responseBody,
         time: endTime - startTime,
         size: new Blob([responseBody]).size,
