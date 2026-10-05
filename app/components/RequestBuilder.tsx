@@ -6,7 +6,8 @@
 // 2. Enter the URL
 // 3. Add headers
 // 4. Write request body
-// 5. Send the request
+// 5. Configure authentication (Bearer, Basic, API key)
+// 6. Send the request
 // ============================================================
 
 "use client";
@@ -14,6 +15,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import type {
   ApiRequest,
+  AuthConfig,
+  AuthType,
   FormField,
   Header,
   HttpMethod,
@@ -21,6 +24,8 @@ import type {
   RequestBodyType,
 } from "../lib/types";
 import {
+  applyAuthHeader,
+  buildAuthHeader,
   buildMultipartBody,
   buildUrlWithParams,
   inferBodyType,
@@ -29,7 +34,7 @@ import {
 } from "../lib/utils";
 
 // Define the available request tabs
-type RequestTab = "headers" | "body" | "params";
+type RequestTab = "headers" | "body" | "params" | "auth";
 
 interface RequestBuilderProps {
   onSendRequest: (data: {
@@ -71,6 +76,16 @@ export default function RequestBuilder({
   // Boundary shared by the auto-set multipart Content-Type header and the
   // serialized body - regenerated together in changeBodyType().
   const [formBoundary, setFormBoundary] = useState<string>(makeFormBoundary);
+  // Auth tab credentials (plan 2.1). One object so the tab can patch a
+  // single field with a single updateAuth() call.
+  const [auth, setAuth] = useState<AuthConfig>({
+    type: "none",
+    token: "",
+    username: "",
+    password: "",
+    apiKeyName: "X-API-Key",
+    apiKeyValue: "",
+  });
 
   // Track which tab is active in the request section
   const [activeTab, setActiveTab] = useState<RequestTab>("headers");
@@ -123,6 +138,14 @@ export default function RequestBuilder({
     ["x-www-form-urlencoded", "x-www-form-urlencoded"],
     ["raw", "Raw"],
     ["binary", "Binary"],
+  ];
+
+  // Auth types from FRONTEND_PLAN.md 2.1 (order matches the plan).
+  const authTypeOptions: [AuthType, string][] = [
+    ["none", "None"],
+    ["bearer", "Bearer Token"],
+    ["basic", "Basic Auth"],
+    ["api-key", "API Key"],
   ];
 
   const methodColors: Record<HttpMethod, string> = {
@@ -257,6 +280,16 @@ export default function RequestBuilder({
     setFormFields(formFields.filter((f) => f.id !== id));
   };
 
+  // ---- AUTH (plan 2.1) ----
+  // Patch one credential field at a time; `type` swaps come through here too.
+  const updateAuth = (patch: Partial<AuthConfig>) => {
+    setAuth((prev) => ({ ...prev, ...patch }));
+  };
+
+  // Header the Auth tab will inject - rendered as a live preview there and
+  // merged into the real headers in handleSubmit().
+  const authPreviewHeader = buildAuthHeader(auth);
+
   // Serialize the body according to the selected mode (plan 1.4).
   const resolveBody = (): string | Blob => {
     switch (bodyType) {
@@ -281,8 +314,11 @@ export default function RequestBuilder({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const activeHeaders = headers.filter(
-      (h) => h.enabled && h.key.trim() !== ""
+    // Enabled headers, with the auth-generated header merged in last so the
+    // active auth config wins over any manual/stored Authorization header.
+    const activeHeaders = applyAuthHeader(
+      headers.filter((h) => h.enabled && h.key.trim() !== ""),
+      auth
     );
     // Compose the final URL: base + enabled params (?key=value&key2=value2)
     const finalUrl = buildUrlWithParams(url, params);
@@ -373,6 +409,22 @@ export default function RequestBuilder({
         >
           Params
         </button>
+
+        {/* Auth Tab - the dot marks an active (non-None) auth config */}
+        <button
+          type="button"
+          onClick={() => setActiveTab("auth")}
+          className={`pb-2 px-1 font-medium transition-colors ${
+            activeTab === "auth"
+              ? "text-blue-400 border-b-2 border-blue-400"
+              : "text-slate-400 hover:text-slate-200 border-b-2 border-transparent"
+          }`}
+        >
+          Auth
+          {auth.type !== "none" && (
+            <span className="ml-1.5 inline-block w-1.5 h-1.5 rounded-full bg-blue-400 align-middle" />
+          )}
+        </button>
       </div>
 
       {/* Tab Content - Only shows the active tab's content */}
@@ -418,6 +470,12 @@ export default function RequestBuilder({
             >
               + Add Header
             </button>
+            {auth.type !== "none" && (
+              <p className="text-slate-600 text-xs">
+                An auth header from the Auth tab is added automatically when
+                the request is sent.
+              </p>
+            )}
           </div>
         )}
 
@@ -601,6 +659,164 @@ export default function RequestBuilder({
               Enabled parameters are appended to the URL when the request is
               sent.
             </p>
+          </div>
+        )}
+
+        {/* Auth Content - credentials only; the header is added on send (2.1) */}
+        {activeTab === "auth" && (
+          <div className="flex flex-col gap-3">
+            {/* Auth type dropdown - drives which fields show below */}
+            <div className="flex items-center gap-2">
+              <label htmlFor="auth-type" className="text-slate-400 text-sm">
+                Auth type
+              </label>
+              <select
+                id="auth-type"
+                value={auth.type}
+                onChange={(e) =>
+                  updateAuth({ type: e.target.value as AuthType })
+                }
+                className="px-3 py-1.5 bg-slate-800 border border-slate-600 rounded text-white text-sm cursor-pointer focus:outline-none focus:border-blue-500"
+              >
+                {authTypeOptions.map(([value, label]) => (
+                  <option key={value} value={value} className="bg-slate-800">
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* None - no credentials, nothing is added */}
+            {auth.type === "none" && (
+              <p className="text-slate-500 text-sm">
+                No authentication - the request is sent without an auth
+                header.
+              </p>
+            )}
+
+            {/* Bearer Token - Authorization: Bearer <token> */}
+            {auth.type === "bearer" && (
+              <div className="flex flex-col gap-2">
+                <label
+                  htmlFor="auth-token"
+                  className="text-slate-400 text-sm"
+                >
+                  Token
+                </label>
+                <input
+                  id="auth-token"
+                  type="text"
+                  value={auth.token}
+                  onChange={(e) => updateAuth({ token: e.target.value })}
+                  placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  className="px-3 py-1.5 bg-slate-800 border border-slate-600 rounded text-white text-sm placeholder-slate-600 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+            )}
+
+            {/* Basic Auth - Authorization: Basic base64(username:password) */}
+            {auth.type === "basic" && (
+              <div className="flex gap-2">
+                <div className="flex flex-col gap-2 flex-1">
+                  <label
+                    htmlFor="auth-username"
+                    className="text-slate-400 text-sm"
+                  >
+                    Username
+                  </label>
+                  <input
+                    id="auth-username"
+                    type="text"
+                    value={auth.username}
+                    onChange={(e) => updateAuth({ username: e.target.value })}
+                    placeholder="Username"
+                    className="px-3 py-1.5 bg-slate-800 border border-slate-600 rounded text-white text-sm placeholder-slate-600 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div className="flex flex-col gap-2 flex-1">
+                  <label
+                    htmlFor="auth-password"
+                    className="text-slate-400 text-sm"
+                  >
+                    Password
+                  </label>
+                  <input
+                    id="auth-password"
+                    type="password"
+                    autoComplete="new-password"
+                    value={auth.password}
+                    onChange={(e) => updateAuth({ password: e.target.value })}
+                    placeholder="Password"
+                    className="px-3 py-1.5 bg-slate-800 border border-slate-600 rounded text-white text-sm placeholder-slate-600 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* API Key - customizable header name + value (e.g. X-API-Key) */}
+            {auth.type === "api-key" && (
+              <div className="flex gap-2 items-end">
+                <div className="flex flex-col gap-2 flex-1">
+                  <label
+                    htmlFor="api-key-name"
+                    className="text-slate-400 text-sm"
+                  >
+                    Key name
+                  </label>
+                  <input
+                    id="api-key-name"
+                    type="text"
+                    value={auth.apiKeyName}
+                    onChange={(e) =>
+                      updateAuth({ apiKeyName: e.target.value })
+                    }
+                    placeholder="X-API-Key"
+                    className="px-3 py-1.5 bg-slate-800 border border-slate-600 rounded text-white text-sm placeholder-slate-600 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div className="flex flex-col gap-2 flex-1">
+                  <label
+                    htmlFor="api-key-value"
+                    className="text-slate-400 text-sm"
+                  >
+                    Value
+                  </label>
+                  <input
+                    id="api-key-value"
+                    type="text"
+                    value={auth.apiKeyValue}
+                    onChange={(e) =>
+                      updateAuth({ apiKeyValue: e.target.value })
+                    }
+                    placeholder="Value"
+                    className="px-3 py-1.5 bg-slate-800 border border-slate-600 rounded text-white text-sm placeholder-slate-600 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Live preview - what you see here is exactly what is sent */}
+            {authPreviewHeader ? (
+              <div className="bg-slate-900 border border-slate-700 rounded px-3 py-2">
+                <p className="text-slate-500 text-xs mb-1">
+                  Added to the request automatically when sent:
+                </p>
+                <p className="font-mono text-xs text-slate-300 break-all">
+                  <span className="text-blue-400">
+                    {authPreviewHeader.key}
+                  </span>
+                  {": "}
+                  {authPreviewHeader.value}
+                </p>
+              </div>
+            ) : (
+              auth.type !== "none" && (
+                <p className="text-slate-600 text-xs">
+                  Fill in the fields above - the generated header is previewed
+                  here before you send.
+                </p>
+              )
+            )}
           </div>
         )}
       </div>

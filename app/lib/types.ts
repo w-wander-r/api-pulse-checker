@@ -34,6 +34,23 @@ export type RequestBodyType =
   | "raw"
   | "binary";
 
+/** Authentication scheme selected in the Auth tab (plan 2.1) */
+export type AuthType = "none" | "bearer" | "basic" | "api-key";
+
+/**
+ * Credentials edited in the Auth tab (plan 2.1).
+ * Kept as one object so the tab can patch a single field without a setter
+ * per field; `type` decides which fields apply.
+ */
+export interface AuthConfig {
+  type: AuthType;
+  token: string;       // Bearer token -> "Authorization: Bearer <token>"
+  username: string;    // Basic auth   -> "Authorization: Basic base64(...)"
+  password: string;    // Basic auth
+  apiKeyName: string;  // API key header name (e.g. "X-API-Key")
+  apiKeyValue: string; // API key header value
+}
+
 /** Represents an API request that the user is building */
 export interface ApiRequest {
   method: HttpMethod;
