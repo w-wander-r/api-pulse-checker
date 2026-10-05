@@ -12,8 +12,21 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import type { ApiRequest, HttpMethod, Header, QueryParam } from "../lib/types";
-import { buildUrlWithParams, parseQueryParams } from "../lib/utils";
+import type {
+  ApiRequest,
+  FormField,
+  Header,
+  HttpMethod,
+  QueryParam,
+  RequestBodyType,
+} from "../lib/types";
+import {
+  buildMultipartBody,
+  buildUrlWithParams,
+  inferBodyType,
+  makeFormBoundary,
+  parseQueryParams,
+} from "../lib/utils";
 
 // Define the available request tabs
 type RequestTab = "headers" | "body" | "params";
@@ -23,7 +36,8 @@ interface RequestBuilderProps {
     method: HttpMethod;
     url: string;
     headers: Header[];
-    body: string;
+    // string, or a File/Blob for the Binary body type (plan 1.4)
+    body: string | Blob;
   }) => void;
   /**
    * Request selected from the sidebar history. Every time a new value is
@@ -45,6 +59,18 @@ export default function RequestBuilder({
   ]);
   const [body, setBody] = useState("");
   const [params, setParams] = useState<QueryParam[]>([]);
+  // Which body editor is active (plan 1.4). Also drives the Content-Type
+  // auto-set in changeBodyType() below.
+  const [bodyType, setBodyType] = useState<RequestBodyType>("json");
+  // Shared key-value rows for the form-data / x-www-form-urlencoded editors.
+  const [formFields, setFormFields] = useState<FormField[]>([
+    { id: "f1", key: "", value: "", enabled: true },
+  ]);
+  // File chosen in the binary editor (files are never persisted to history).
+  const [binaryFile, setBinaryFile] = useState<File | null>(null);
+  // Boundary shared by the auto-set multipart Content-Type header and the
+  // serialized body - regenerated together in changeBodyType().
+  const [formBoundary, setFormBoundary] = useState<string>(makeFormBoundary);
 
   // Track which tab is active in the request section
   const [activeTab, setActiveTab] = useState<RequestTab>("headers");
@@ -78,11 +104,26 @@ export default function RequestBuilder({
     setParams(parseQueryParams(requestToLoad.url));
     setHeaders(requestToLoad.headers);
     setBody(requestToLoad.body);
+    // Pick the right editor for the reloaded body (empty -> None,
+    // parseable -> JSON, else Raw). Structured bodies (urlencoded /
+    // multipart) reload as Raw but keep their stored Content-Type header,
+    // so re-sending them still works.
+    setBodyType(inferBodyType(requestToLoad.body));
     // Jump back to Headers so the user sees what was reloaded.
     setActiveTab("headers");
   }
 
   const methods: HttpMethod[] = ["GET", "POST", "PUT", "DELETE", "PATCH"];
+
+  // Body modes from FRONTEND_PLAN.md 1.4 (order matches the plan).
+  const bodyTypeOptions: [RequestBodyType, string][] = [
+    ["none", "None"],
+    ["json", "JSON"],
+    ["form-data", "Form-data"],
+    ["x-www-form-urlencoded", "x-www-form-urlencoded"],
+    ["raw", "Raw"],
+    ["binary", "Binary"],
+  ];
 
   const methodColors: Record<HttpMethod, string> = {
     GET: "bg-green-600 hover:bg-green-700",
@@ -148,6 +189,96 @@ export default function RequestBuilder({
     setParams(parseQueryParams(value));
   };
 
+  // ---- BODY MODES (plan 1.4) ----
+  // Keep the Content-Type header in sync with the selected body type.
+  const upsertContentType = (value: string) => {
+    setHeaders((prev) => {
+      const index = prev.findIndex(
+        (h) => h.key.trim().toLowerCase() === "content-type"
+      );
+      if (index === -1) {
+        return [
+          ...prev,
+          { id: "ct-" + Date.now(), key: "Content-Type", value, enabled: true },
+        ];
+      }
+      if (prev[index].value === value) return prev;
+      return prev.map((h, i) => (i === index ? { ...h, value } : h));
+    });
+  };
+
+  const changeBodyType = (next: RequestBodyType) => {
+    setBodyType(next);
+    switch (next) {
+      case "json":
+        upsertContentType("application/json");
+        break;
+      case "raw":
+        upsertContentType("text/plain");
+        break;
+      case "x-www-form-urlencoded":
+        upsertContentType("application/x-www-form-urlencoded");
+        break;
+      case "form-data": {
+        // The boundary must appear in the header AND delimit the body,
+        // so regenerate both together to keep them in sync.
+        const boundary = makeFormBoundary();
+        setFormBoundary(boundary);
+        upsertContentType(`multipart/form-data; boundary=${boundary}`);
+        break;
+      }
+      case "binary":
+        upsertContentType("application/octet-stream");
+        break;
+      case "none":
+        // No body - leave the user's headers untouched.
+        break;
+    }
+  };
+
+  const addFormField = () => {
+    setFormFields([
+      ...formFields,
+      { id: "new-" + Date.now(), key: "", value: "", enabled: true },
+    ]);
+  };
+
+  const updateFormField = (
+    id: string,
+    field: "key" | "value" | "enabled",
+    newValue: string | boolean
+  ) => {
+    setFormFields(
+      formFields.map((f) => (f.id === id ? { ...f, [field]: newValue } : f))
+    );
+  };
+
+  const removeFormField = (id: string) => {
+    setFormFields(formFields.filter((f) => f.id !== id));
+  };
+
+  // Serialize the body according to the selected mode (plan 1.4).
+  const resolveBody = (): string | Blob => {
+    switch (bodyType) {
+      case "none":
+        return "";
+      case "form-data":
+        // buildMultipartBody filters disabled/empty fields itself.
+        return buildMultipartBody(formFields, formBoundary);
+      case "x-www-form-urlencoded":
+        return new URLSearchParams(
+          formFields
+            .filter((f) => f.enabled && f.key.trim() !== "")
+            .map((f) => [f.key, f.value])
+        ).toString();
+      case "binary":
+        return binaryFile ?? "";
+      case "json":
+      case "raw":
+        return body;
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const activeHeaders = headers.filter(
@@ -157,7 +288,19 @@ export default function RequestBuilder({
     const finalUrl = buildUrlWithParams(url, params);
     // Keep the URL bar showing exactly what is being sent.
     setUrl(finalUrl);
-    onSendRequest({ method, url: finalUrl, headers: activeHeaders, body });
+    const finalBody = resolveBody();
+    // Reflect structured payloads (urlencoded/multipart) back into the
+    // textarea so switching to Raw later shows exactly what was sent.
+    // Binary files and None are left alone.
+    if (typeof finalBody === "string" && bodyType !== "none") {
+      setBody(finalBody);
+    }
+    onSendRequest({
+      method,
+      url: finalUrl,
+      headers: activeHeaders,
+      body: finalBody,
+    });
   };
 
   return (
@@ -278,18 +421,127 @@ export default function RequestBuilder({
           </div>
         )}
 
-        {/* Body Content */}
+        {/* Body Content - the editor depends on the selected body type (1.4) */}
         {activeTab === "body" && (
-          <div className="flex flex-col gap-2">
-            <label className="text-slate-400 text-sm">Request Body (JSON)</label>
-            <textarea
-              ref={textareaRef}
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              placeholder='{"key": "value"}'
-              rows={4}
-              className="px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white font-mono text-sm placeholder-slate-500 focus:outline-none focus:border-blue-500 resize-none"
-            />
+          <div className="flex flex-col gap-3">
+            {/* Body type dropdown - also auto-sets the Content-Type header */}
+            <div className="flex items-center gap-2">
+              <label htmlFor="body-type" className="text-slate-400 text-sm">
+                Body type
+              </label>
+              <select
+                id="body-type"
+                value={bodyType}
+                onChange={(e) =>
+                  changeBodyType(e.target.value as RequestBodyType)
+                }
+                className="px-3 py-1.5 bg-slate-800 border border-slate-600 rounded text-white text-sm cursor-pointer focus:outline-none focus:border-blue-500"
+              >
+                {bodyTypeOptions.map(([value, label]) => (
+                  <option key={value} value={value} className="bg-slate-800">
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* None - no editor, no body on the wire */}
+            {bodyType === "none" && (
+              <p className="text-slate-500 text-sm">
+                This request will be sent without a body.
+              </p>
+            )}
+
+            {/* JSON / Raw - plain textarea */}
+            {(bodyType === "json" || bodyType === "raw") && (
+              <>
+                <label className="text-slate-400 text-sm">
+                  {bodyType === "json" ? "JSON body" : "Raw text body"}
+                </label>
+                <textarea
+                  ref={textareaRef}
+                  value={body}
+                  onChange={(e) => setBody(e.target.value)}
+                  placeholder={
+                    bodyType === "json" ? '{"key": "value"}' : "Any raw text"
+                  }
+                  rows={4}
+                  className="px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white font-mono text-sm placeholder-slate-500 focus:outline-none focus:border-blue-500 resize-none"
+                />
+              </>
+            )}
+
+            {/* form-data / x-www-form-urlencoded - key-value editor */}
+            {(bodyType === "form-data" ||
+              bodyType === "x-www-form-urlencoded") && (
+              <div className="flex flex-col gap-2">
+                {formFields.map((field) => (
+                  <div key={field.id} className="flex gap-2 items-center">
+                    <input
+                      type="checkbox"
+                      checked={field.enabled}
+                      onChange={(e) =>
+                        updateFormField(field.id, "enabled", e.target.checked)
+                      }
+                      className="w-4 h-4 accent-blue-500"
+                    />
+                    <input
+                      type="text"
+                      value={field.key}
+                      onChange={(e) =>
+                        updateFormField(field.id, "key", e.target.value)
+                      }
+                      placeholder="Field name"
+                      className="flex-1 px-3 py-1.5 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:border-blue-500"
+                    />
+                    <input
+                      type="text"
+                      value={field.value}
+                      onChange={(e) =>
+                        updateFormField(field.id, "value", e.target.value)
+                      }
+                      placeholder="Value"
+                      className="flex-1 px-3 py-1.5 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:border-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeFormField(field.id)}
+                      className="text-red-400 hover:text-red-300 px-2"
+                    >
+                      x
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={addFormField}
+                  className="text-blue-400 hover:text-blue-300 text-sm text-left"
+                >
+                  + Add Field
+                </button>
+                <p className="text-slate-600 text-xs">
+                  {bodyType === "form-data"
+                    ? "Sent as multipart/form-data - the boundary is added to Content-Type automatically."
+                    : "Serialized to key=value&key2=value2 when the request is sent."}
+                </p>
+              </div>
+            )}
+
+            {/* Binary - file picker */}
+            {bodyType === "binary" && (
+              <div className="flex flex-col gap-2">
+                <input
+                  type="file"
+                  onChange={(e) => setBinaryFile(e.target.files?.[0] ?? null)}
+                  className="text-slate-300 text-sm file:mr-3 file:px-3 file:py-1.5 file:rounded file:bg-slate-700 file:text-slate-200 file:border-0 file:cursor-pointer hover:file:bg-slate-600"
+                />
+                <p className="text-slate-600 text-xs">
+                  {binaryFile
+                    ? `Selected: ${binaryFile.name} (${binaryFile.size} bytes) - sent as-is. Files are not stored in history.`
+                    : "Choose a file - its bytes are sent as the request body."}
+                </p>
+              </div>
+            )}
           </div>
         )}
 

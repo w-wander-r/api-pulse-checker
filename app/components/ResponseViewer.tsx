@@ -26,6 +26,9 @@ export default function ResponseViewer({ response, isLoading }: ResponseViewerPr
   const [activeTab, setActiveTab] = useState<ResponseTab>("body");
   // Track copy button state for feedback
   const [copied, setCopied] = useState(false);
+  // Word wrap for the body - ON by default so long/minified responses
+  // never render as one endless horizontally-scrolling line.
+  const [wrap, setWrap] = useState(true);
 
   // ---- COPY TO CLIPBOARD ----
   const handleCopyResponse = async () => {
@@ -50,12 +53,15 @@ export default function ResponseViewer({ response, isLoading }: ResponseViewerPr
   };
 
   // ---- FORMAT JSON NICELY ----
-  // Tries to parse and pretty-print JSON, falls back to raw text
+  // Tries to parse and pretty-print JSON, falls back to raw text.
+  // Trim + strip a UTF-8 BOM first: some servers prepend one, which makes
+  // JSON.parse fail and the whole body render as raw one-line text.
   const formatBody = (body: string): string => {
+    const cleaned = body.replace(/^\uFEFF/, "").trim();
     try {
-      return JSON.stringify(JSON.parse(body), null, 2);
+      return JSON.stringify(JSON.parse(cleaned), null, 2);
     } catch {
-      return body; // Not valid JSON, show as-is
+      return cleaned; // Not valid JSON, show as-is
     }
   };
 
@@ -170,6 +176,15 @@ export default function ResponseViewer({ response, isLoading }: ResponseViewerPr
         {/* Body Content */}
         {activeTab === "body" && (
           <div className="relative group">
+            {/* Word wrap toggle - keeps long/minified responses readable */}
+            <button
+              onClick={() => setWrap((w) => !w)}
+              className="absolute top-2 right-24 px-3 py-1.5 rounded text-xs font-medium bg-slate-700 text-slate-300 hover:bg-slate-600 hover:text-white transition-all"
+              title="Toggle word wrap for the response body"
+            >
+              {wrap ? "Wrap: On" : "Wrap: Off"}
+            </button>
+
             {/* Copy Button */}
             <button
               onClick={handleCopyResponse}
@@ -183,7 +198,11 @@ export default function ResponseViewer({ response, isLoading }: ResponseViewerPr
               {copied ? "Copied!" : "Copy"}
             </button>
 
-            <pre className="bg-slate-900 p-4 rounded-lg overflow-auto max-h-96 text-sm pr-20">
+            <pre
+              className={`bg-slate-900 p-4 rounded-lg overflow-auto max-h-96 text-sm pr-44 ${
+                wrap ? "whitespace-pre-wrap break-words" : "whitespace-pre"
+              }`}
+            >
               <code className="text-slate-200">
                 {formatBody(response.body)}
               </code>

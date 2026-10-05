@@ -9,7 +9,7 @@
 // (spaces -> +, &, = escaped, etc.).
 // ============================================================
 
-import type { QueryParam } from "./types";
+import type { FormField, QueryParam, RequestBodyType } from "./types";
 
 /** Split a URL into base (no query, no hash), query string, and hash. */
 function splitUrl(rawUrl: string): {
@@ -74,4 +74,53 @@ export function buildUrlWithParams(rawUrl: string, params: QueryParam[]): string
 
   const query = search.toString();
   return query ? `${base}?${query}${hash}` : `${base}${hash}`;
+}
+
+/**
+ * Fresh boundary for a multipart/form-data request. The same value goes
+ * into the auto-set `Content-Type: multipart/form-data; boundary=...`
+ * header and into buildMultipartBody(), so header and body always agree.
+ */
+export function makeFormBoundary(): string {
+  return `----ApiPulseBoundary${crypto.randomUUID()}`;
+}
+
+/**
+ * Serialize enabled fields into a multipart/form-data body (RFC 7578).
+ *
+ * Done manually instead of via FormData so the result is a plain string
+ * that can be stored in history and re-sent verbatim later. Text fields
+ * only - file fields are covered by the Binary body type.
+ */
+export function buildMultipartBody(
+  fields: FormField[],
+  boundary: string
+): string {
+  const parts = fields
+    .filter((field) => field.enabled && field.key.trim() !== "")
+    .map((field) => {
+      // Field names are quoted-string parameters: escape quotes and drop
+      // CR/LF. Field values are raw octets terminated only by the
+      // (unique) boundary, so they need no escaping.
+      const name = field.key.replace(/[\r\n]/g, "").replace(/"/g, '\\"');
+      return `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${field.value}\r\n`;
+    });
+
+  return parts.join("") + `--${boundary}--\r\n`;
+}
+
+/**
+ * Best-effort body type when reloading a request from history (plan 1.4).
+ * The chosen type itself isn't persisted - only the final body string and
+ * the Content-Type header are - so infer: empty -> None, parseable JSON
+ * -> JSON, anything else -> Raw (which resends the string verbatim).
+ */
+export function inferBodyType(body: string): RequestBodyType {
+  if (body === "") return "none";
+  try {
+    JSON.parse(body);
+    return "json";
+  } catch {
+    return "raw";
+  }
 }

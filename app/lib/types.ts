@@ -17,6 +17,23 @@ export interface QueryParam {
   enabled: boolean;  // Toggle to include/exclude this parameter
 }
 
+/** A key-value row in the form-data / x-www-form-urlencoded editors */
+export interface FormField {
+  id: string;        // Unique ID for React list rendering
+  key: string;       // Field name (e.g., "username")
+  value: string;     // Field value (e.g., "wander")
+  enabled: boolean;  // Toggle to include/exclude this field
+}
+
+/** Which editor the Body tab shows / how the body is serialized (plan 1.4) */
+export type RequestBodyType =
+  | "none"
+  | "json"
+  | "form-data"
+  | "x-www-form-urlencoded"
+  | "raw"
+  | "binary";
+
 /** Represents an API request that the user is building */
 export interface ApiRequest {
   method: HttpMethod;

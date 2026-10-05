@@ -56,13 +56,22 @@ export default function Home() {
     method: ApiRequest["method"];
     url: string;
     headers: Header[];
-    body: string;
+    // string, or a File/Blob for the Binary body type (plan 1.4)
+    body: string | Blob;
   }) => {
     setIsLoading(true);
     setResponse(null);
 
     // Record the start time for measuring request duration
     const startTime = Date.now();
+
+    // GET never carries a body, and "" (Body type None / no file picked)
+    // means "no body" - avoids sending empty payloads or persisting them.
+    const hasBody = data.method !== "GET" && data.body !== "";
+    // Only plain, non-empty strings can be stored in history (body TEXT
+    // column) - binary Files are never persisted.
+    const persistedBody =
+      typeof data.body === "string" && hasBody ? data.body : undefined;
 
     // History entry shown immediately; the database returns the final one.
     const localId = `local-${Date.now()}`;
@@ -78,7 +87,7 @@ export default function Home() {
       const res = await fetch(data.url, {
         method: data.method,
         headers: headerObject,
-        body: data.method !== "GET" ? data.body : undefined,
+        body: hasBody ? data.body : undefined,
       });
 
       // Read the response body as text
@@ -118,7 +127,7 @@ export default function Home() {
           timestamp: new Date(),
           status: res.status,
           headers: data.headers.map(({ key, value }) => ({ key, value })),
-          body: data.method !== "GET" ? data.body : undefined,
+          body: persistedBody,
         },
         ...prev,
       ]);
@@ -128,7 +137,7 @@ export default function Home() {
         method: data.method,
         url: data.url,
         headers: data.headers,
-        body: data.method !== "GET" ? data.body : undefined,
+        body: persistedBody,
         status: res.status,
         durationMs: apiResponse.time,
         responseSize: apiResponse.size,
@@ -168,7 +177,7 @@ export default function Home() {
           timestamp: new Date(),
           status: undefined,
           headers: data.headers.map(({ key, value }) => ({ key, value })),
-          body: data.method !== "GET" ? data.body : undefined,
+          body: persistedBody,
         },
         ...prev,
       ]);
@@ -177,7 +186,7 @@ export default function Home() {
         method: data.method,
         url: data.url,
         headers: data.headers,
-        body: data.method !== "GET" ? data.body : undefined,
+        body: persistedBody,
         status: null,
       });
     } finally {
