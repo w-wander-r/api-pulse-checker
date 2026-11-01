@@ -1,9 +1,11 @@
+// app/api/debug-better-auth/route.ts
 import { NextResponse } from "next/server";
 
-const GET = async () => {
-    const url = process.env.BETTER_AUTH_URL;
-    return NextResponse.json({
-        BETTER_AUTH_URL: url,
-        envKeys: Object.keys(process.env).filter(k => k.startsWith("BETTER"))
-    });
-}
+export const GET = async () => {
+  const url = process.env.BETTER_AUTH_URL;
+  return NextResponse.json({
+    BETTER_AUTH_URL: url,
+    // also show the raw env‑var count for safety
+    envKeys: Object.keys(process.env).filter((k) => k.startsWith("BETTER")),
+  });
+};
