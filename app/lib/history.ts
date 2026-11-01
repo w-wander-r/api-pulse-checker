@@ -110,3 +110,69 @@ export async function fetchDbHealth(): Promise<DbHealthResponse> {
     };
   }
 }
+
+// ============================================================
+// LOCAL FALLBACK - history in localStorage (NOT signed in)
+// ============================================================
+// Signed-in users persist through the API functions above
+// (PostgreSQL, scoped to their account). Visitors without a
+// session get a best-effort copy in THIS browser instead, so the
+// sidebar still works. It does NOT survive a page reset / clear
+// browsing data - the Sidebar shows a warning label for it.
+// Every function is defensive: storage disabled or quota hit
+// must never break the UI.
+// ============================================================
+
+/** Bump the suffix if the stored shape ever changes. */
+const LOCAL_HISTORY_KEY = "api-pulse-history-v1";
+
+/** Cap stored entries so the ~5 MB localStorage quota can't blow up. */
+const MAX_LOCAL_ENTRIES = 50;
+
+/** Read local history; never throws (private mode / quota -> []). */
+export function loadLocalHistory(): HistoryItem[] {
+  try {
+    const raw = window.localStorage.getItem(LOCAL_HISTORY_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    // Revive timestamps - JSON stores Date as an ISO string.
+    return (parsed as HistoryItem[]).map((item) => ({
+      ...item,
+      timestamp: new Date(item.timestamp),
+    }));
+  } catch (error) {
+    console.warn("[history] Failed to read local history:", error);
+    return [];
+  }
+}
+
+/** Write the list back; swallows quota/privacy errors. */
+function writeLocalHistory(items: HistoryItem[]): void {
+  try {
+    window.localStorage.setItem(LOCAL_HISTORY_KEY, JSON.stringify(items));
+  } catch (error) {
+    console.warn("[history] Failed to persist local history:", error);
+  }
+}
+
+/** Append one entry (newest first, deduped by id, capped). */
+export function appendLocalHistory(entry: HistoryItem): void {
+  const items = loadLocalHistory().filter((item) => item.id !== entry.id);
+  items.unshift(entry);
+  writeLocalHistory(items.slice(0, MAX_LOCAL_ENTRIES));
+}
+
+/** Remove a single entry from local history. */
+export function removeLocalHistory(id: string): void {
+  writeLocalHistory(loadLocalHistory().filter((item) => item.id !== id));
+}
+
+/** Wipe local history. */
+export function clearLocalHistory(): void {
+  try {
+    window.localStorage.removeItem(LOCAL_HISTORY_KEY);
+  } catch (error) {
+    console.warn("[history] Failed to clear local history:", error);
+  }
+}

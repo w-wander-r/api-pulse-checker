@@ -6,9 +6,14 @@
 // DELETE /api/history        -> clear the whole history
 //
 // Backed by the `request_history` table (see db/schema.sql).
+//
+// AUTH: every method requires a signed-in user (401 otherwise).
+// Sessions are validated here in the handler (not in middleware)
+// and rows are scoped per user via `user_id`.
 // ============================================================
 
 import { NextResponse, type NextRequest } from "next/server";
+import { getSessionFromHeaders } from "../../lib/auth";
 import { query } from "../../lib/db";
 import type {
   CreateHistoryInput,
@@ -72,12 +77,19 @@ export async function GET(request: NextRequest) {
     : Math.min(Math.max(parsedLimit, 1), MAX_LIMIT);
 
   try {
+    // Validate the session cookie before touching the database.
+    const session = await getSessionFromHeaders(request.headers);
+    if (!session) {
+      return errorResponse("Sign in to view your history", 401);
+    }
+
     const result = await query<RequestHistoryRow>(
       `SELECT ${HISTORY_COLUMNS}
          FROM request_history
+        WHERE user_id = $1
         ORDER BY created_at DESC, id DESC
-        LIMIT $1`,
-      [limit]
+        LIMIT $2`,
+      [session.user.id, limit]
     );
     return NextResponse.json({ items: result.rows });
   } catch (error) {
@@ -110,12 +122,19 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    // Only signed-in users may persist history; rows belong to them.
+    const session = await getSessionFromHeaders(request.headers);
+    if (!session) {
+      return errorResponse("Sign in to save history", 401);
+    }
+
     const result = await query<RequestHistoryRow>(
       `INSERT INTO request_history
-         (method, url, headers, body, status, duration_ms, response_size)
-       VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7)
+         (user_id, method, url, headers, body, status, duration_ms, response_size)
+       VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8)
        RETURNING ${HISTORY_COLUMNS}`,
       [
+        session.user.id,
         payload.method,
         payload.url,
         JSON.stringify(toStoredHeaders(payload.headers)),
@@ -136,10 +155,17 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// ---- DELETE: clear history ----
-export async function DELETE() {
+// ---- DELETE: clear history (only the signed-in user's rows) ----
+export async function DELETE(request: NextRequest) {
   try {
-    const result = await query("DELETE FROM request_history");
+    const session = await getSessionFromHeaders(request.headers);
+    if (!session) {
+      return errorResponse("Sign in to clear history", 401);
+    }
+
+    const result = await query("DELETE FROM request_history WHERE user_id = $1", [
+      session.user.id,
+    ]);
     return NextResponse.json({ deleted: result.rowCount ?? 0 });
   } catch (error) {
     console.error("[api/history] DELETE failed:", error);

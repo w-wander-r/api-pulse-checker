@@ -15,6 +15,7 @@
     "db:check": "node --env-file-if-exists=.env.local scripts/db-check.mjs"
   },
   "dependencies": {
+    "better-auth": "^1.7.7",
     "next": "16.3.5",
     "pg": "^8.23.0",
     "react": "19.2.8",

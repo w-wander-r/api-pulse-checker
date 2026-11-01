@@ -39,7 +39,11 @@ API Pulse Check is an HTTP client application that allows users to build and sen
 ## Database
 
 Request history is persisted in **PostgreSQL** through Next.js Route Handlers, so it survives
-page reloads and restarts. Everything the app needs lives in `request_history` (see `db/schema.sql`).
+page reloads and restarts. Signed-in users get their own rows in `request_history`
+(`user_id`-scoped); signed-out visitors keep history in **browser localStorage** only
+(a warning label in the sidebar says it is cleared on page reset). Accounts and
+sessions are handled by **Better Auth** (`user`, `session`, `account`, `verification`
+tables - see `db/schema.sql` and `app/lib/auth.ts`).
 
 Runinng `npm run dev` starting postgress container. See `dev.mjs`
 
@@ -77,7 +81,11 @@ conflict between them.
 
    The command prints the connected database name - expect `neondb`, not `wander`.
 3. Deploy: import the GitHub repo on your hosting platform (e.g. Vercel) and set
-   `DATABASE_URL` to the same Neon URL in the platform's environment variables.
+   in the platform's environment variables:
+   - `DATABASE_URL` - the same Neon URL
+   - `BETTER_AUTH_SECRET` - generate with `openssl rand -base64 32` (>= 32 chars)
+   - `BETTER_AUTH_URL` - `https://<your-domain>` (auth breaks without it)
+
    Every push to the branch redeploys automatically.
 
 Local `.env.local` is git-ignored and only read by local dev, so the Neon
@@ -90,22 +98,32 @@ Troubleshooting: if the connection fails during the TLS handshake, change
 | Method | Route | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/db/health` | Connectivity probe (`200` connected / `503` offline) |
-| `GET` | `/api/history?limit=50` | Recent history, newest first (max 200) |
-| `POST` | `/api/history` | Store a sent request |
-| `DELETE` | `/api/history` | Clear all history |
-| `DELETE` | `/api/history/:id` | Delete a single entry |
+| `GET` | `/api/history?limit=50` | Recent history for the signed-in user (max 200) - `401` when signed out |
+| `POST` | `/api/history` | Store a sent request - `401` when signed out |
+| `DELETE` | `/api/history` | Clear the signed-in user's history - `401` when signed out |
+| `DELETE` | `/api/history/:id` | Delete a single own entry - `401` when signed out |
+| `POST` | `/api/auth/sign-up/email` | Create an account (Better Auth, no verification email) |
+| `POST` | `/api/auth/sign-in/email` | Sign in, sets the session cookie |
+| `POST` | `/api/auth/sign-out` | Sign out |
+| `GET` | `/api/auth/get-session` | Current session (`null` when signed out) |
 
 The sidebar footer shows the live database status. If the database is unreachable the app keeps
-working with in-memory history and reports `DB offline – history not saved`.
+working with in-memory history and reports `DB offline – history not saved`. Signed-out
+visitors instead see a `Local storage - browser only` footer plus a warning that
+history lives in this browser only and is lost on a page reset.
 
 ### Files
 
 ```
 app/lib/db.ts            # pg connection pool + health probe
-app/lib/history.ts       # client-side fetch wrappers for the history API
+app/lib/auth.ts          # Better Auth server instance (email + password)
+app/lib/auth-client.ts   # Better Auth browser client (session, sign in/out)
+app/lib/history.ts       # history API wrappers + localStorage fallback
+app/api/auth/[...all]/   # Better Auth catch-all endpoints
 app/api/db/health/       # connectivity endpoint
-app/api/history/         # history collection + single-entry endpoints
-db/schema.sql            # database schema
+app/api/history/         # history endpoints (session-gated, per-user)
+app/login/ app/signup/   # account pages
+db/schema.sql            # database schema (app + auth tables)
 docker-compose.yml       # PostgreSQL service (used by npm run dev)
 scripts/dev.mjs          # npm run dev - DB lifecycle + Next.js dev server
 scripts/db-migrate.mjs   # npm run db:migrate / db:migrate:prod

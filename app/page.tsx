@@ -16,11 +16,16 @@ import type {
   Header,
   HistoryItem,
 } from "./lib/types";
+import { authClient } from "./lib/auth-client";
 import {
+  appendLocalHistory,
   clearHistory,
+  clearLocalHistory,
   deleteHistoryEntry,
   fetchDbHealth,
   fetchHistory,
+  loadLocalHistory,
+  removeLocalHistory,
   saveHistoryEntry,
 } from "./lib/history";
 
@@ -32,12 +37,33 @@ export default function Home() {
   const [requestToLoad, setRequestToLoad] = useState<ApiRequest | null>(null);
   const [dbStatus, setDbStatus] = useState<DbHealthResponse | null>(null);
 
-  // ---- LOAD PERSISTED HISTORY ON MOUNT ----
+  // ---- SESSION (Better Auth) ----
+  const { data: session, isPending: sessionPending } = authClient.useSession();
+
+  // Where history lives right now:
+  //   "loading" -> first session check in flight; touch nothing yet
+  //   "db"      -> signed in; PostgreSQL through /api/history
+  //   "local"   -> signed out; this browser's localStorage only
+  const storageMode: "loading" | "db" | "local" = sessionPending
+    ? "loading"
+    : session
+      ? "db"
+      : "local";
+
+  // ---- LOAD HISTORY FOR THE CURRENT STORAGE MODE ----
   useEffect(() => {
+    // Wait for the first session check before choosing a source.
+    if (storageMode === "loading") return;
+
     let cancelled = false;
 
     const load = async () => {
-      const [health, items] = await Promise.all([fetchDbHealth(), fetchHistory()]);
+      const [health, items] = await Promise.all([
+        fetchDbHealth(),
+        storageMode === "db"
+          ? fetchHistory()
+          : Promise.resolve(loadLocalHistory()),
+      ]);
       if (cancelled) return;
       setDbStatus(health);
       setHistory(items);
@@ -48,7 +74,7 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [storageMode]);
 
   // ---- HANDLE SENDING REQUEST ----
   // This function is called when the user clicks "Send"
@@ -119,40 +145,43 @@ export default function Home() {
       // Show the entry in the sidebar right away...
       // (headers/body included so it can be reloaded even before the
       //  database confirms the save)
-      setHistory((prev) => [
-        {
-          id: localId,
-          method: data.method,
-          url: data.url,
-          timestamp: new Date(),
-          status: res.status,
-          headers: data.headers.map(({ key, value }) => ({ key, value })),
-          body: persistedBody,
-        },
-        ...prev,
-      ]);
-
-      // ...then store it in PostgreSQL and swap in the persisted entry.
-      const saved = await saveHistoryEntry({
+      const entry: HistoryItem = {
+        id: localId,
         method: data.method,
         url: data.url,
-        headers: data.headers,
-        body: persistedBody,
+        timestamp: new Date(),
         status: res.status,
-        durationMs: apiResponse.time,
-        responseSize: apiResponse.size,
-      });
+        headers: data.headers.map(({ key, value }) => ({ key, value })),
+        body: persistedBody,
+      };
+      setHistory((prev) => [entry, ...prev]);
 
-      if (saved) {
-        setHistory((prev) =>
-          prev.map((item) => (item.id === localId ? saved : item))
-        );
-        // A successful write means the database is reachable again.
-        setDbStatus((prev) =>
-          prev?.connected
-            ? prev
-            : { connected: true, message: "Connected to PostgreSQL" }
-        );
+      if (storageMode === "db") {
+        // Signed in: store it in PostgreSQL and swap in the persisted entry.
+        const saved = await saveHistoryEntry({
+          method: data.method,
+          url: data.url,
+          headers: data.headers,
+          body: persistedBody,
+          status: res.status,
+          durationMs: apiResponse.time,
+          responseSize: apiResponse.size,
+        });
+
+        if (saved) {
+          setHistory((prev) =>
+            prev.map((item) => (item.id === localId ? saved : item))
+          );
+          // A successful write means the database is reachable again.
+          setDbStatus((prev) =>
+            prev?.connected
+              ? prev
+              : { connected: true, message: "Connected to PostgreSQL" }
+          );
+        }
+      } else {
+        // Signed out: keep it in this browser only (see lib/history.ts).
+        appendLocalHistory(entry);
       }
     } catch (error) {
       // Handle network errors (DNS failure, CORS, timeout, etc.)
@@ -169,26 +198,28 @@ export default function Home() {
       });
 
       // Still record the attempt so the history reflects what was tried.
-      setHistory((prev) => [
-        {
-          id: localId,
-          method: data.method,
-          url: data.url,
-          timestamp: new Date(),
-          status: undefined,
-          headers: data.headers.map(({ key, value }) => ({ key, value })),
-          body: persistedBody,
-        },
-        ...prev,
-      ]);
-
-      await saveHistoryEntry({
+      const entry: HistoryItem = {
+        id: localId,
         method: data.method,
         url: data.url,
-        headers: data.headers,
+        timestamp: new Date(),
+        status: undefined,
+        headers: data.headers.map(({ key, value }) => ({ key, value })),
         body: persistedBody,
-        status: null,
-      });
+      };
+      setHistory((prev) => [entry, ...prev]);
+
+      if (storageMode === "db") {
+        await saveHistoryEntry({
+          method: data.method,
+          url: data.url,
+          headers: data.headers,
+          body: persistedBody,
+          status: null,
+        });
+      } else {
+        appendLocalHistory(entry);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -214,18 +245,30 @@ export default function Home() {
   };
 
   // ---- HANDLE REMOVING ONE HISTORY ENTRY ----
-  const handleDeleteHistory = useCallback(async (item: HistoryItem) => {
-    // Update the UI first so the list feels instant.
-    setHistory((prev) => prev.filter((h) => h.id !== item.id));
-    if (item.id.startsWith("local-")) return; // never persisted, nothing to delete
-    await deleteHistoryEntry(item.id);
-  }, []);
+  const handleDeleteHistory = useCallback(
+    async (item: HistoryItem) => {
+      // Update the UI first so the list feels instant.
+      setHistory((prev) => prev.filter((h) => h.id !== item.id));
+
+      if (storageMode === "local") {
+        removeLocalHistory(item.id);
+        return;
+      }
+      if (item.id.startsWith("local-")) return; // never persisted, nothing to delete
+      await deleteHistoryEntry(item.id);
+    },
+    [storageMode]
+  );
 
   // ---- HANDLE CLEARING THE WHOLE HISTORY ----
   const handleClearHistory = useCallback(async () => {
     setHistory([]);
+    if (storageMode === "local") {
+      clearLocalHistory();
+      return;
+    }
     await clearHistory();
-  }, []);
+  }, [storageMode]);
 
   // ---- RENDER ----
   return (
@@ -235,13 +278,14 @@ export default function Home() {
 
       {/* Main content area - fills remaining height */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Left sidebar with history (persisted in PostgreSQL) */}
+        {/* Left sidebar: PostgreSQL when signed in, localStorage when not */}
         <Sidebar
           history={history}
           onSelectRequest={handleSelectHistory}
           onDeleteRequest={handleDeleteHistory}
           onClearHistory={handleClearHistory}
           dbStatus={dbStatus}
+          localOnly={storageMode === "local"}
         />
 
         {/* Main content - request builder + response */}

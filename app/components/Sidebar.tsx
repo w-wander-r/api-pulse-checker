@@ -7,6 +7,7 @@
 
 "use client";
 
+import Link from "next/link";
 import type { DbHealthResponse, HistoryItem, HttpMethod } from "../lib/types";
 
 interface SidebarProps {
@@ -18,6 +19,12 @@ interface SidebarProps {
   onClearHistory?: () => void;
   /** Latest /api/db/health probe; null while the first check is running. */
   dbStatus?: DbHealthResponse | null;
+  /**
+   * True when the visitor is NOT signed in: history lives in this
+   * browser's localStorage only, so the "local only" warning label
+   * is shown (it does not survive a page reset).
+   */
+  localOnly?: boolean;
 }
 
 // Color coding for method badges in history
@@ -35,6 +42,7 @@ export default function Sidebar({
   onDeleteRequest,
   onClearHistory,
   dbStatus,
+  localOnly,
 }: SidebarProps) {
   // Format timestamp to readable time
   const formatTime = (date: Date): string => {
@@ -62,6 +70,24 @@ export default function Sidebar({
           </button>
         )}
       </div>
+
+      {/* Warning for signed-out visitors: local storage only */}
+      {localOnly && (
+        <p
+          role="status"
+          className="px-4 py-2 border-b border-amber-900/60 bg-amber-950/40 text-amber-300 text-xs leading-relaxed"
+        >
+          ⚠ Not signed in - history is saved only in this browser and is
+          lost when the page resets.{" "}
+          <Link
+            href="/login"
+            className="underline font-medium hover:text-amber-200"
+          >
+            Sign in
+          </Link>{" "}
+          to keep it.
+        </p>
+      )}
 
       {/* History List */}
       <div className="flex-1 overflow-y-auto">
@@ -140,32 +166,42 @@ export default function Sidebar({
           </ul>
         )}
       </div>
-    {/* Database connection status (history is stored in PostgreSQL) */}
-      <div
-        className="px-4 py-2 border-t border-slate-700 text-xs flex items-center gap-2"
-        title={dbStatus?.message ?? "Checking database connection"}
-      >
-        {!dbStatus ? (
-          <>
-            <span className="w-2 h-2 rounded-full bg-slate-500 animate-pulse" />
-            <span className="text-slate-400">Checking database…</span>
-          </>
-        ) : dbStatus.connected ? (
-          <>
-            <span className="w-2 h-2 rounded-full bg-green-500" />
-            <span className="text-green-400 truncate">
-              DB: {dbStatus.database ?? "connected"}
-            </span>
-          </>
-        ) : (
-          <>
-            <span className="w-2 h-2 rounded-full bg-amber-500" />
-            <span className="text-amber-400 truncate">
-              DB offline – history not saved
-            </span>
-          </>
-        )}
-      </div>
+    {/* Footer: what backs the history list right now */}
+      {localOnly ? (
+        <div
+          className="px-4 py-2 border-t border-slate-700 text-xs flex items-center gap-2"
+          title="You are not signed in - history is stored in this browser only (localStorage)"
+        >
+          <span className="w-2 h-2 rounded-full bg-amber-500" />
+          <span className="text-amber-400 truncate">Local storage - browser only</span>
+        </div>
+      ) : (
+        <div
+          className="px-4 py-2 border-t border-slate-700 text-xs flex items-center gap-2"
+          title={dbStatus?.message ?? "Checking database connection"}
+        >
+          {!dbStatus ? (
+            <>
+              <span className="w-2 h-2 rounded-full bg-slate-500 animate-pulse" />
+              <span className="text-slate-400">Checking database…</span>
+            </>
+          ) : dbStatus.connected ? (
+            <>
+              <span className="w-2 h-2 rounded-full bg-green-500" />
+              <span className="text-green-400 truncate">
+                DB: {dbStatus.database ?? "connected"}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="w-2 h-2 rounded-full bg-amber-500" />
+              <span className="text-amber-400 truncate">
+                DB offline – history not saved
+              </span>
+            </>
+          )}
+        </div>
+      )}
     </aside>
   );
 }
