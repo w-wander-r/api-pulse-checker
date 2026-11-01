@@ -25,6 +25,9 @@ export const auth = betterAuth({
   // Reuse the app's existing pg pool (small, cached on globalThis).
   database: pool,
   secret: process.env.BETTER_AUTH_SECRET,
+  // Required for cookie-based sessions & CSRF protection.
+  // Set to your deployed URL (Vercel, Netlify, etc.).
+  origin: process.env.BETTER_AUTH_URL,
   emailAndPassword: {
     enabled: true,
     // Accounts activate immediately - no verification email for now.
