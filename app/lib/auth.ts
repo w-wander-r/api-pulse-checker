@@ -26,8 +26,7 @@ export const auth = betterAuth({
   database: pool,
   secret: process.env.BETTER_AUTH_SECRET,
   // Required for cookie-based sessions & CSRF protection.
-  // Set to your deployed URL (Vercel, Netlify, etc.).
-  origin: process.env.BETTER_AUTH_URL,
+  origin: process.env.BETTER_AUTH_URL ?? "https://api-pulse-checker.vercel.app",
   emailAndPassword: {
     enabled: true,
     // Accounts activate immediately - no verification email for now.
