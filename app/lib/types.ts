@@ -69,6 +69,25 @@ export interface ApiResponse {
   size: number;          // Response size in bytes
 }
 
+export interface ProxyRequest {
+  method: HttpMethod;
+  url: string;
+  headers: Record<string, string>;
+  /** UTF-8 text body (used when isBase64 is false/unset). */
+  body?: string;
+  /** Base64-encoded body (used for binary File/Blob bodies). */
+  bodyBase64?: string;
+  isBase64?: boolean;
+}
+
+/** Response returned by POST /api/proxy. */
+export interface ProxyResponse {
+  status: number;
+  statusText: string;
+  headers: Record<string, string>;
+  body: string;
+}
+
 /** A single header key-value pair as persisted in the database (JSONB) */
 export interface StoredHeader {
   key: string;

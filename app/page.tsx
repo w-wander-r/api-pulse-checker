@@ -15,6 +15,7 @@ import type {
   DbHealthResponse,
   Header,
   HistoryItem,
+  ProxyResponse,
 } from "./lib/types";
 import { authClient } from "./lib/auth-client";
 import {
@@ -109,32 +110,53 @@ export default function Home() {
         headerObject[h.key] = h.value;
       });
 
-      // Actually send the HTTP request using the browser's fetch API
-      const res = await fetch(data.url, {
-        method: data.method,
-        headers: headerObject,
-        body: hasBody ? data.body : undefined,
+      let bodyPayload: {
+        body?: string;
+        bodyBase64?: string;
+        isBase64?: boolean;
+      } = {};
+      if (hasBody && typeof data.body !== "string") {
+        // Binary File/Blob - base64 encode so it survives JSON.stringify.
+        const arrayBuffer = await data.body.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+        let binary = "";
+        for (let i = 0; i < bytes.byteLength; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        bodyPayload = { bodyBase64: btoa(binary), isBase64: true };
+      } else if (hasBody) {
+        bodyPayload = { body: data.body as string };
+      }
+
+      const proxyRes = await fetch("/api/proxy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          method: data.method,
+          url: data.url,
+          headers: headerObject,
+          ...bodyPayload,
+        }),
       });
 
-      // Read the response body as text
-      const responseBody = await res.text();
-      const endTime = Date.now();
+      if (!proxyRes.ok) {
+        const errData = (await proxyRes.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        throw new Error(errData.error ?? `Proxy returned ${proxyRes.status}`);
+      }
 
-      // Convert the fetch Headers object to a plain object (plan 1.3) so
-      // the ResponseViewer Headers tab can render it. `Headers` is iterable
-      // of [key, value] pairs; the browser lowercases keys and combines
-      // duplicates, and hides Set-Cookie (forbidden response header).
-      // Note: no conversion needed on the error path below - a network
-      // failure has no response headers at all.
-      const responseHeaders: Record<string, string> = Object.fromEntries(
-        res.headers
-      );
+      const proxyData = (await proxyRes.json()) as ProxyResponse;
+
+      // Read the response body as text
+      const responseBody = proxyData.body;
+      const endTime = Date.now();
 
       // Build ApiResponse object
       const apiResponse: ApiResponse = {
-        status: res.status,
-        statusText: res.statusText,
-        headers: responseHeaders,
+        status: proxyData.status,
+        statusText: proxyData.statusText,
+        headers: proxyData.headers,
         body: responseBody,
         time: endTime - startTime,
         size: new Blob([responseBody]).size,
@@ -150,7 +172,7 @@ export default function Home() {
         method: data.method,
         url: data.url,
         timestamp: new Date(),
-        status: res.status,
+        status: apiResponse.status,
         headers: data.headers.map(({ key, value }) => ({ key, value })),
         body: persistedBody,
       };
@@ -163,7 +185,7 @@ export default function Home() {
           url: data.url,
           headers: data.headers,
           body: persistedBody,
-          status: res.status,
+          status: apiResponse.status,
           durationMs: apiResponse.time,
           responseSize: apiResponse.size,
         });
