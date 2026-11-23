@@ -52,17 +52,87 @@ export default function ResponseViewer({ response, isLoading }: ResponseViewerPr
     return "text-slate-300";
   };
 
-  // ---- FORMAT JSON NICELY ----
-  // Tries to parse and pretty-print JSON, falls back to raw text.
-  // Trim + strip a UTF-8 BOM first: some servers prepend one, which makes
-  // JSON.parse fail and the whole body render as raw one-line text.
-  const formatBody = (body: string): string => {
+  // ---- HTML / XML PRETTY-PRINTER ----
+  // Collapses whitespace between tags, then re-indents opening/closing tags.
+  // Void elements (br, img, etc.) are not indented.
+  const formatHtml = (html: string): string => {
+    const voidElements = new Set([
+      "area",
+      "base",
+      "br",
+      "col",
+      "embed",
+      "hr",
+      "img",
+      "input",
+      "link",
+      "meta",
+      "param",
+      "source",
+      "track",
+      "wbr",
+    ]);
+
+    // Normalise whitespace between tags so re-indentation starts clean.
+    const formatted = html.replace(/>\s*</g, "><");
+    let indent = 0;
+    const lines: string[] = [];
+    const tokens = formatted.split(/(<[^>]*>)/);
+
+    for (const token of tokens) {
+      if (!token) continue;
+      if (token.startsWith("</")) {
+        indent = Math.max(0, indent - 1);
+        lines.push("  ".repeat(indent) + token);
+      } else if (
+        token.startsWith("<") &&
+        !token.endsWith("/>") &&
+        !token.startsWith("<?") &&
+        !token.startsWith("<!")
+      ) {
+        const tagName = token.match(/^<(\w+)/)?.[1]?.toLowerCase();
+        lines.push("  ".repeat(indent) + token);
+        if (tagName && !voidElements.has(tagName)) {
+          indent++;
+        }
+      } else {
+        lines.push("  ".repeat(indent) + token);
+      }
+    }
+
+    return lines.join("\n");
+  };
+
+  // ---- FORMAT RESPONSE BODY ----
+  // Content-type aware: pretty-prints JSON, HTML, and XML; falls back to
+  // raw text for anything else. JSON is attempted first regardless of
+  // content-type because some servers omit or mis-set the header.
+  const formatBody = (body: string, contentType?: string): string => {
     const cleaned = body.replace(/^\uFEFF/, "").trim();
+    if (cleaned === "") return cleaned;
+
+    const ct = (contentType ?? "").toLowerCase();
+    const isHtml =
+      ct.includes("text/html") || ct.includes("application/xhtml");
+    const isXml =
+      ct.includes("application/xml") ||
+      ct.includes("text/xml") ||
+      ct.endsWith("+xml");
+
+    // 1. Try JSON first (works even when content-type is missing/wrong).
     try {
       return JSON.stringify(JSON.parse(cleaned), null, 2);
     } catch {
-      return cleaned; // Not valid JSON, show as-is
+      // Not valid JSON – continue below.
     }
+
+    // 2. HTML / XML – pretty-print with indentation.
+    if (isHtml || isXml) {
+      return formatHtml(cleaned);
+    }
+
+    // 3. Plain text or unknown – return as-is.
+    return cleaned;
   };
 
   // ---- RENDER STATES ----
@@ -204,7 +274,7 @@ export default function ResponseViewer({ response, isLoading }: ResponseViewerPr
               }`}
             >
               <code className="text-slate-200">
-                {formatBody(response.body)}
+                {formatBody(response.body, response.headers["content-type"])}
               </code>
             </pre>
           </div>

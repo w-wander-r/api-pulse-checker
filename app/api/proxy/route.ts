@@ -128,8 +128,8 @@ export async function POST(request: NextRequest) {
     outgoingBody = body;
   }
 
-  // GET/HEAD must not carry a body.
-  if (method === "GET" || method === "HEAD") {
+  // GET must not carry a body.
+  if (method === "GET") {
     outgoingBody = undefined;
   }
 
